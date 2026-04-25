@@ -75,14 +75,28 @@ func TestWriteSnapshotReplacesSymlinkInsteadOfFollowingIt(t *testing.T) {
 
 func TestScanSkipsStateDirectoryAndHashesFiles(t *testing.T) {
 	root := t.TempDir()
-	if err := os.MkdirAll(filepath.Join(root, ".gobsidian"), 0o755); err != nil {
-		t.Fatalf("MkdirAll: %v", err)
+	for _, dir := range []string{".gobsidian", ".hidden-state", ".obsidian", "notes"} {
+		if err := os.MkdirAll(filepath.Join(root, dir), 0o755); err != nil {
+			t.Fatalf("MkdirAll %s: %v", dir, err)
+		}
 	}
 	if err := os.WriteFile(filepath.Join(root, "note.md"), []byte("hello"), 0o644); err != nil {
 		t.Fatalf("WriteFile note: %v", err)
 	}
+	if err := os.WriteFile(filepath.Join(root, ".hidden.md"), []byte("hidden"), 0o644); err != nil {
+		t.Fatalf("WriteFile hidden note: %v", err)
+	}
 	if err := os.WriteFile(filepath.Join(root, ".gobsidian", "state.json"), []byte("{}"), 0o644); err != nil {
 		t.Fatalf("WriteFile state: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(root, ".hidden-state", "state.json"), []byte("{}"), 0o644); err != nil {
+		t.Fatalf("WriteFile hidden state: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(root, ".obsidian", "app.json"), []byte("{}"), 0o644); err != nil {
+		t.Fatalf("WriteFile obsidian config: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "notes", ".hidden.md"), []byte("hidden"), 0o644); err != nil {
+		t.Fatalf("WriteFile nested hidden note: %v", err)
 	}
 
 	files, err := Scan(root)
@@ -97,6 +111,11 @@ func TestScanSkipsStateDirectoryAndHashesFiles(t *testing.T) {
 	}
 	if _, ok := files[".gobsidian/state.json"]; ok {
 		t.Fatalf("state directory should be skipped")
+	}
+	for _, path := range []string{".hidden.md", ".hidden-state/state.json", ".obsidian/app.json", "notes/.hidden.md"} {
+		if _, ok := files[path]; ok {
+			t.Fatalf("hidden path %s should be skipped", path)
+		}
 	}
 }
 

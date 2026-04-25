@@ -277,8 +277,8 @@ func (c *Client) BulkWrite(ctx context.Context, records []protocol.Record) (map[
 				typ, _ := existing["type"].(string)
 				if ok && typ == "leaf" {
 					revs[result.ID], _ = existing["_rev"].(string)
-					continue
 				}
+				continue
 			}
 			return nil, fmt.Errorf("bulk write failed for %s: %s %s", result.ID, result.Error, result.Reason)
 		}

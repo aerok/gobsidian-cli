@@ -61,7 +61,7 @@ func Scan(root string) (map[string]File, error) {
 		if rel == "." {
 			return nil
 		}
-		if rel == StateDir || strings.HasPrefix(rel, StateDir+"/") {
+		if isHiddenPath(rel) {
 			if entry.IsDir() {
 				return filepath.SkipDir
 			}
@@ -89,12 +89,21 @@ func Scan(root string) (map[string]File, error) {
 	return files, err
 }
 
+func isHiddenPath(rel string) bool {
+	for _, part := range strings.Split(rel, "/") {
+		if strings.HasPrefix(part, ".") {
+			return true
+		}
+	}
+	return false
+}
+
 func writeFileAtomic(path string, data []byte, perm fs.FileMode) error {
 	dir := filepath.Dir(path)
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return err
 	}
-	tmp, err := os.CreateTemp(dir, ".livesync-go-write-*")
+	tmp, err := os.CreateTemp(dir, ".gobsidian-write-*")
 	if err != nil {
 		return err
 	}

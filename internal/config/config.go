@@ -38,14 +38,15 @@ type LiveSyncConfig struct {
 }
 
 type CouchDBConfig struct {
-	URL                 string `json:"url" mapstructure:"url"`
-	DB                  string `json:"db" mapstructure:"db"`
-	Username            string `json:"username" mapstructure:"username"`
-	Password            string `json:"password" mapstructure:"password"`
-	Passphrase          string `json:"passphrase" mapstructure:"passphrase"`
-	PropertyObfuscation bool   `json:"property_obfuscation" mapstructure:"property_obfuscation"`
-	BaseDir             string `json:"base_dir" mapstructure:"base_dir"`
-	DryRun              bool   `json:"dry_run" mapstructure:"dry_run"`
+	URL                         string `json:"url" mapstructure:"url"`
+	DB                          string `json:"db" mapstructure:"db"`
+	Username                    string `json:"username" mapstructure:"username"`
+	Password                    string `json:"password" mapstructure:"password"`
+	Passphrase                  string `json:"passphrase" mapstructure:"passphrase"`
+	PropertyObfuscation         bool   `json:"property_obfuscation" mapstructure:"property_obfuscation"`
+	HandleFilenameCaseSensitive bool   `json:"handle_filename_case_sensitive" mapstructure:"handle_filename_case_sensitive"`
+	BaseDir                     string `json:"base_dir" mapstructure:"base_dir"`
+	DryRun                      bool   `json:"dry_run" mapstructure:"dry_run"`
 }
 
 func Load(path string) (Config, error) {

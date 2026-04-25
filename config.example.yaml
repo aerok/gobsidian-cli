@@ -51,6 +51,10 @@ targets:
         # Default: false.
         property_obfuscation: true
 
+        # Optional. Match LiveSync's handleFilenameCaseSensitive setting.
+        # Default: false.
+        handle_filename_case_sensitive: false
+
         # Optional. Remote path prefix to sync and strip locally.
         # Default: "".
         base_dir: ""
@@ -73,5 +77,6 @@ targets:
         password: ${COUCHDB_PASSWORD}
         passphrase: ${LIVESYNC_PASSPHRASE}
         property_obfuscation: true
+        handle_filename_case_sensitive: false
         base_dir: ""
         dry_run: false

@@ -9,11 +9,11 @@ type Document struct {
 	ID        string               `json:"_id"`
 	Rev       string               `json:"_rev,omitempty"`
 	Path      string               `json:"path,omitempty"`
-	Ctime     int64                `json:"ctime,omitempty"`
-	Mtime     int64                `json:"mtime,omitempty"`
-	Size      int64                `json:"size,omitempty"`
+	Ctime     int64                `json:"ctime"`
+	Mtime     int64                `json:"mtime"`
+	Size      int64                `json:"size"`
 	Type      string               `json:"type,omitempty"`
-	Children  []string             `json:"children,omitempty"`
+	Children  []string             `json:"children"`
 	Data      any                  `json:"data,omitempty"`
 	Eden      map[string]EdenChunk `json:"eden"`
 	Deleted   bool                 `json:"deleted,omitempty"`

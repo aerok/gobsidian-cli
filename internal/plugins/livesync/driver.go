@@ -52,6 +52,7 @@ func (d *Driver) Sync(ctx context.Context, target config.Target, syncOpts plugin
 		ForceLocal:          syncOpts.ForceLocal,
 		Passphrase:          couch.Passphrase,
 		PropertyObfuscation: couch.PropertyObfuscation,
+		CaseSensitive:       couch.HandleFilenameCaseSensitive,
 	}
 	if opts.Passphrase != "" {
 		salt, err := store.SyncParameters(ctx)

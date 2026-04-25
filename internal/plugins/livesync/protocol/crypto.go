@@ -33,9 +33,10 @@ const (
 )
 
 type CodecOptions struct {
-	Passphrase          string
-	PBKDF2Salt          []byte
-	PropertyObfuscation bool
+	Passphrase                  string
+	PBKDF2Salt                  []byte
+	PropertyObfuscation         bool
+	HandleFilenameCaseSensitive bool
 }
 
 type Codec struct {
@@ -156,7 +157,7 @@ func (c Codec) EncodeDocument(doc Document) (Document, error) {
 		if err != nil {
 			return Document{}, err
 		}
-		doc.ID = PathToID(doc.Path, c.opts.Passphrase)
+		doc.ID = PathToID(doc.Path, c.opts.Passphrase, c.opts.HandleFilenameCaseSensitive)
 		doc.Path = encryptedMetaPrefix + encrypted
 		doc.Ctime = 0
 		doc.Mtime = 0
@@ -245,12 +246,15 @@ func EncryptedChunkID(content, passphrase string) string {
 	return encryptedChunkIDPrefix + strconv.FormatUint(xxhash.Sum64String(value), 36)
 }
 
-func PathToID(filename, passphrase string) string {
+func PathToID(filename, passphrase string, caseSensitive bool) string {
 	if strings.HasPrefix(filename, "_") {
 		filename = "/" + filename
 	}
 	if passphrase == "" {
 		return filename
+	}
+	if !caseSensitive {
+		filename = strings.ToLower(filename)
 	}
 	hashedPassphrase := sha256Hex(passphrase)
 	return obfuscatedIDPrefix + sha256Hex(hashedPassphrase+":"+filename)

@@ -39,6 +39,35 @@ Without `--config`, the CLI searches:
 Use `--vault <name>` when multiple vaults are configured. If only one vault is
 configured, local vault commands may omit `--vault`.
 
+Minimal LiveSync CouchDB config:
+
+```yaml
+version: 1
+
+targets:
+  - name: personal
+    plugin: livesync
+    vault:
+      path: /vault/obsidian-personal
+    state:
+      path: /var/lib/gobsidian/state/personal.json
+    livesync:
+      couchdb:
+        url: http://couchdb:5984
+        db: obsidian_personal
+        username: root
+        password: ${COUCHDB_PASSWORD}
+        passphrase: ${LIVESYNC_PASSPHRASE}
+        property_obfuscation: true
+        handle_filename_case_sensitive: false
+        base_dir: ""
+        dry_run: false
+```
+
+`handle_filename_case_sensitive` aligned with the Obsidian LiveSync
+`handleFilenameCaseSensitive` setting; `false` matches the common LiveSync
+case-insensitive filename hash behavior.
+
 ## Common Workflow
 
 Before reading or editing notes backed by LiveSync, sync first:

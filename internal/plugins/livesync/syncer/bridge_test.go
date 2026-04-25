@@ -43,6 +43,31 @@ func TestRunBridgeOncePullsRemoteAndSuppressesLoopback(t *testing.T) {
 	}
 }
 
+func TestRunBridgeOnceForceRemoteSkipsHiddenRemoteFiles(t *testing.T) {
+	root := t.TempDir()
+	statePath := filepath.Join(root, ".gobsidian", "state.json")
+	store := &memoryCouch{
+		records: []protocol.Record{
+			{Chunk: &protocol.Chunk{ID: "h:state", Data: "state"}},
+			{Document: &protocol.Document{ID: "hidden-state", Rev: "1-a", Path: ".hidden-state/state.json", Type: "plain", Children: []string{"h:state"}, Eden: map[string]protocol.EdenChunk{}}},
+			{Chunk: &protocol.Chunk{ID: "h:note", Data: "note"}},
+			{Document: &protocol.Document{ID: "note.md", Rev: "1-b", Path: "note.md", Type: "plain", Children: []string{"h:note"}, Eden: map[string]protocol.EdenChunk{}}},
+		},
+		lastSeq: "1",
+	}
+
+	if err := RunBridgeOnce(context.Background(), store, BridgeOptions{Root: root, StatePath: statePath, NowMillis: 2500, ForceRemote: true}); err != nil {
+		t.Fatalf("RunBridgeOnce returned error: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(root, ".hidden-state", "state.json")); !os.IsNotExist(err) {
+		t.Fatalf("hidden remote state should not be restored, stat err=%v", err)
+	}
+	got, err := os.ReadFile(filepath.Join(root, "note.md"))
+	if err != nil || string(got) != "note" {
+		t.Fatalf("visible note not restored, got=%q err=%v", string(got), err)
+	}
+}
+
 func TestRunBridgeOncePreservesUntrackedLocalFileOnInitialPull(t *testing.T) {
 	root := t.TempDir()
 	statePath := filepath.Join(root, ".gobsidian", "state.json")
@@ -316,7 +341,7 @@ func TestRunBridgeOncePushesEncryptedObfuscatedLocalDelete(t *testing.T) {
 		Files: map[string]FileState{
 			"secret/note.md": {
 				Hash:      hashBytes([]byte("old")),
-				DocID:     protocol.PathToID("secret/note.md", "secret-pass"),
+				DocID:     protocol.PathToID("secret/note.md", "secret-pass", false),
 				RemoteRev: "1-old",
 			},
 		},

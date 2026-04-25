@@ -81,6 +81,7 @@ targets:
         password: ${COUCHDB_PASSWORD}
         passphrase: ${LIVESYNC_PASSPHRASE}
         property_obfuscation: true
+        handle_filename_case_sensitive: false
         base_dir: ""
         dry_run: false
 ```

@@ -34,6 +34,7 @@ type BridgeOptions struct {
 	Passphrase          string
 	PBKDF2Salt          []byte
 	PropertyObfuscation bool
+	CaseSensitive       bool
 }
 
 type Status struct {
@@ -200,9 +201,10 @@ func pullRemote(ctx context.Context, store CouchStore, opts BridgeOptions, local
 		return err
 	}
 	codec := protocol.NewCodec(protocol.CodecOptions{
-		Passphrase:          opts.Passphrase,
-		PBKDF2Salt:          opts.PBKDF2Salt,
-		PropertyObfuscation: opts.PropertyObfuscation,
+		Passphrase:                  opts.Passphrase,
+		PBKDF2Salt:                  opts.PBKDF2Salt,
+		PropertyObfuscation:         opts.PropertyObfuscation,
+		HandleFilenameCaseSensitive: opts.CaseSensitive,
 	})
 	records, err = codec.DecodeRecords(records)
 	if err != nil {
@@ -217,9 +219,10 @@ func seedStateFromRemote(ctx context.Context, store CouchStore, opts BridgeOptio
 		return err
 	}
 	codec := protocol.NewCodec(protocol.CodecOptions{
-		Passphrase:          opts.Passphrase,
-		PBKDF2Salt:          opts.PBKDF2Salt,
-		PropertyObfuscation: opts.PropertyObfuscation,
+		Passphrase:                  opts.Passphrase,
+		PBKDF2Salt:                  opts.PBKDF2Salt,
+		PropertyObfuscation:         opts.PropertyObfuscation,
+		HandleFilenameCaseSensitive: opts.CaseSensitive,
 	})
 	records, err = codec.DecodeRecords(records)
 	if err != nil {
@@ -234,7 +237,8 @@ func seedStateFromRemote(ctx context.Context, store CouchStore, opts BridgeOptio
 		if record.Document == nil || record.Document.Path == "" || record.Document.IsDeleted() {
 			continue
 		}
-		if _, ok := toLocalPath(record.Document.Path, opts.BaseDir); !ok {
+		localPath, ok := toLocalPath(record.Document.Path, opts.BaseDir)
+		if !ok || isHiddenLocalPath(localPath) {
 			continue
 		}
 		remoteDocs[record.Document.Path] = *record.Document
@@ -245,7 +249,7 @@ func seedStateFromRemote(ctx context.Context, store CouchStore, opts BridgeOptio
 	}
 	for remotePath, file := range remoteFiles {
 		localPath, ok := toLocalPath(remotePath, opts.BaseDir)
-		if !ok {
+		if !ok || isHiddenLocalPath(localPath) {
 			continue
 		}
 		doc := remoteDocs[remotePath]
@@ -284,9 +288,10 @@ func pullRemoteChanges(ctx context.Context, store CouchStore, opts BridgeOptions
 		return nil
 	}
 	codec := protocol.NewCodec(protocol.CodecOptions{
-		Passphrase:          opts.Passphrase,
-		PBKDF2Salt:          opts.PBKDF2Salt,
-		PropertyObfuscation: opts.PropertyObfuscation,
+		Passphrase:                  opts.Passphrase,
+		PBKDF2Salt:                  opts.PBKDF2Salt,
+		PropertyObfuscation:         opts.PropertyObfuscation,
+		HandleFilenameCaseSensitive: opts.CaseSensitive,
 	})
 	records, err := codec.DecodeRecords(records)
 	if err != nil {
@@ -344,7 +349,8 @@ func applyRemoteRecords(records []protocol.Record, opts BridgeOptions, localBefo
 		if record.Document == nil || record.Document.Path == "" {
 			continue
 		}
-		if _, ok := toLocalPath(record.Document.Path, opts.BaseDir); !ok {
+		localPath, ok := toLocalPath(record.Document.Path, opts.BaseDir)
+		if !ok || isHiddenLocalPath(localPath) {
 			continue
 		}
 		remoteDocs[record.Document.Path] = *record.Document
@@ -356,7 +362,7 @@ func applyRemoteRecords(records []protocol.Record, opts BridgeOptions, localBefo
 	snapshot := map[string]vault.File{}
 	for remotePath, file := range remoteFiles {
 		localPath, ok := toLocalPath(remotePath, opts.BaseDir)
-		if !ok {
+		if !ok || isHiddenLocalPath(localPath) {
 			continue
 		}
 		doc := remoteDocs[remotePath]
@@ -374,7 +380,7 @@ func applyRemoteRecords(records []protocol.Record, opts BridgeOptions, localBefo
 	}
 	for remotePath, file := range projector.DeletedFiles() {
 		localPath, ok := toLocalPath(remotePath, opts.BaseDir)
-		if !ok {
+		if !ok || isHiddenLocalPath(localPath) {
 			continue
 		}
 		snapshot[localPath] = vault.File{Path: localPath, Deleted: true, Mtime: file.Mtime}
@@ -393,7 +399,7 @@ func applyCouchDeletedChanges(changes []couchdb.Change, opts BridgeOptions, loca
 			continue
 		}
 		localPath, ok := localPathForDocID(change.ID, opts.BaseDir, *state)
-		if !ok {
+		if !ok || isHiddenLocalPath(localPath) {
 			continue
 		}
 		if conflict, ok := deletedConflictFile(localPath, localBefore, *state, opts.NowMillis); ok {
@@ -421,9 +427,10 @@ func buildLocalRecords(files map[string]vault.File, state State, opts BridgeOpti
 
 	var records []protocol.Record
 	codec := protocol.NewCodec(protocol.CodecOptions{
-		Passphrase:          opts.Passphrase,
-		PBKDF2Salt:          opts.PBKDF2Salt,
-		PropertyObfuscation: opts.PropertyObfuscation,
+		Passphrase:                  opts.Passphrase,
+		PBKDF2Salt:                  opts.PBKDF2Salt,
+		PropertyObfuscation:         opts.PropertyObfuscation,
+		HandleFilenameCaseSensitive: opts.CaseSensitive,
 	})
 	for _, localPath := range paths {
 		file := files[localPath]
@@ -435,16 +442,19 @@ func buildLocalRecords(files map[string]vault.File, state State, opts BridgeOpti
 			continue
 		}
 		remotePath := toRemotePath(localPath, opts.BaseDir)
-		chunk, err := codec.EncodeChunk(string(file.Content))
-		if err != nil {
-			return nil, state, err
+		chunkIDs := []string{}
+		for _, piece := range protocol.SplitTextRabinKarp(string(file.Content)) {
+			chunk, err := codec.EncodeChunk(piece)
+			if err != nil {
+				return nil, state, err
+			}
+			chunkIDs = append(chunkIDs, chunk.ID)
+			records = append(records, protocol.Record{Chunk: &chunk})
 		}
-		chunkID := chunk.ID
-		records = append(records, protocol.Record{Chunk: &chunk})
 		previous := state.Files[localPath]
 		docID := previous.DocID
 		if docID == "" {
-			docID = pathToID(remotePath, opts.Passphrase, opts.PropertyObfuscation)
+			docID = pathToID(remotePath, opts.Passphrase, opts.PropertyObfuscation, opts.CaseSensitive)
 		}
 		doc := &protocol.Document{
 			ID:       docID,
@@ -454,7 +464,7 @@ func buildLocalRecords(files map[string]vault.File, state State, opts BridgeOpti
 			Mtime:    chooseMtime(file.Mtime, opts.NowMillis),
 			Size:     int64(len(file.Content)),
 			Type:     "plain",
-			Children: []string{chunkID},
+			Children: chunkIDs,
 			Eden:     map[string]protocol.EdenChunk{},
 		}
 		encodedDoc, err := codec.EncodeDocument(*doc)
@@ -538,6 +548,15 @@ func toLocalPath(remotePath, baseDir string) (string, bool) {
 	return local, local != ""
 }
 
+func isHiddenLocalPath(localPath string) bool {
+	for _, part := range strings.Split(cleanSlash(localPath), "/") {
+		if strings.HasPrefix(part, ".") {
+			return true
+		}
+	}
+	return false
+}
+
 func toRemotePath(localPath, baseDir string) string {
 	localPath = cleanSlash(localPath)
 	baseDir = cleanSlash(baseDir)
@@ -613,9 +632,9 @@ func makeConflictPath(localPath string, nowMillis int64) string {
 	return fmt.Sprintf("%s.sync-conflict-%d%s", base, nowMillis, ext)
 }
 
-func pathToID(path, passphrase string, enabled bool) string {
+func pathToID(path, passphrase string, enabled, caseSensitive bool) string {
 	if enabled && passphrase != "" {
-		return protocol.PathToID(path, passphrase)
+		return protocol.PathToID(path, passphrase, caseSensitive)
 	}
 	if strings.HasPrefix(path, "_") {
 		return "/" + path

@@ -25,6 +25,7 @@ targets:
         password: ${COUCHDB_PASSWORD}
         passphrase: ""
         property_obfuscation: true
+        handle_filename_case_sensitive: true
         base_dir: notes
         dry_run: false
 `)
@@ -45,7 +46,7 @@ targets:
 	if target.Plugin != "livesync" {
 		t.Fatalf("unexpected target plugin: %q", target.Plugin)
 	}
-	if target.LiveSync.CouchDB.Password != "secret" || target.LiveSync.CouchDB.BaseDir != "notes" {
+	if target.LiveSync.CouchDB.Password != "secret" || target.LiveSync.CouchDB.BaseDir != "notes" || !target.LiveSync.CouchDB.HandleFilenameCaseSensitive {
 		t.Fatalf("env/default config not decoded: %#v", target.LiveSync.CouchDB)
 	}
 }
