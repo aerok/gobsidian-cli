@@ -19,7 +19,8 @@ Obsidian notes, tags, frontmatter, or LiveSync-backed vaults.
 Local vault commands operate on Markdown files in the configured vault path. They
 do not contact CouchDB and do not automatically sync.
 
-Sync commands use the configured plugin. v1 supports `livesync-couchdb`.
+Sync commands use the configured plugin. v1 supports `livesync` with the
+`livesync.couchdb` backend.
 
 ## Config
 

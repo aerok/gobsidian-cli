@@ -6,7 +6,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"gobsidian-cli/internal/plugins/livesynccouchdb/livesync"
+	"gobsidian-cli/internal/plugins/livesync/protocol"
 )
 
 func TestChangesReadsIncrementalDocsAndSince(t *testing.T) {
@@ -136,9 +136,9 @@ func TestBulkWriteSkipsExistingChunksAndUsesExistingDocumentRevisions(t *testing
 	defer server.Close()
 
 	client := New(Config{URL: server.URL, Database: "vault"})
-	responses, err := client.BulkWrite(t.Context(), []livesync.Record{
-		{Chunk: &livesync.Chunk{ID: "h:chunk", Data: "hello"}},
-		{Document: &livesync.Document{ID: "note.md", Path: "note.md", Type: "plain", Children: []string{"h:chunk"}, Eden: map[string]livesync.EdenChunk{}}},
+	responses, err := client.BulkWrite(t.Context(), []protocol.Record{
+		{Chunk: &protocol.Chunk{ID: "h:chunk", Data: "hello"}},
+		{Document: &protocol.Document{ID: "note.md", Path: "note.md", Type: "plain", Children: []string{"h:chunk"}, Eden: map[string]protocol.EdenChunk{}}},
 	})
 	if err != nil {
 		t.Fatalf("BulkWrite returned error: %v", err)

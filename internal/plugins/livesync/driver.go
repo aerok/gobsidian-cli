@@ -1,4 +1,4 @@
-package livesynccouchdb
+package livesync
 
 import (
 	"context"
@@ -10,12 +10,12 @@ import (
 
 	"gobsidian-cli/internal/config"
 	"gobsidian-cli/internal/plugin"
-	"gobsidian-cli/internal/plugins/livesynccouchdb/couchdb"
-	"gobsidian-cli/internal/plugins/livesynccouchdb/syncer"
-	"gobsidian-cli/internal/plugins/livesynccouchdb/vault"
+	"gobsidian-cli/internal/plugins/livesync/couchdb"
+	"gobsidian-cli/internal/plugins/livesync/syncer"
+	"gobsidian-cli/internal/plugins/livesync/vault"
 )
 
-const PluginName = "livesync-couchdb"
+const PluginName = "livesync"
 
 type Driver struct {
 	logger *zap.Logger
@@ -36,19 +36,20 @@ func Register(registry interface {
 
 func (d *Driver) Sync(ctx context.Context, target config.Target) (plugin.SyncResult, error) {
 	start := time.Now()
+	couch := target.LiveSync.CouchDB
 	store := couchdb.New(couchdb.Config{
-		URL:      target.LiveSyncCouchDB.URL,
-		Database: target.LiveSyncCouchDB.DB,
-		Username: target.LiveSyncCouchDB.Username,
-		Password: target.LiveSyncCouchDB.Password,
+		URL:      couch.URL,
+		Database: couch.DB,
+		Username: couch.Username,
+		Password: couch.Password,
 	})
 	opts := syncer.BridgeOptions{
 		Root:                target.Vault.Path,
 		StatePath:           statePath(target),
-		BaseDir:             target.LiveSyncCouchDB.BaseDir,
-		DryRun:              target.LiveSyncCouchDB.DryRun,
-		Passphrase:          target.LiveSyncCouchDB.Passphrase,
-		PropertyObfuscation: target.LiveSyncCouchDB.PropertyObfuscation,
+		BaseDir:             couch.BaseDir,
+		DryRun:              couch.DryRun,
+		Passphrase:          couch.Passphrase,
+		PropertyObfuscation: couch.PropertyObfuscation,
 	}
 	if opts.Passphrase != "" {
 		salt, err := store.SyncParameters(ctx)

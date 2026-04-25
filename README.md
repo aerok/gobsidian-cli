@@ -26,10 +26,11 @@ This project is intentionally CLI-only:
 
 v1 ships one sync plugin:
 
-- `livesync-couchdb`
+- `livesync`
 
-Future sync backends such as git or S3 should be added as plugins without
-changing the local vault operation model.
+Future sync systems such as git should be added as plugins without changing the
+local vault operation model. Future LiveSync storage backends such as MinIO
+belong under the `livesync` plugin.
 
 ## Install
 
@@ -55,16 +56,16 @@ When `--config` is omitted, `gobsidian` searches:
 2. `/etc/gobsidian/config.yaml`
 3. `./config.yaml`
 
-The top-level `plugin` selects how `plugin_settings` is parsed. For
-`livesync-couchdb`, `plugin_settings.targets` is the list of CouchDB-backed vault
-mappings.
+The top-level `plugin` selects how `plugin_settings` is parsed. For `livesync`,
+`plugin_settings.targets` is the list of LiveSync-backed vault mappings. v1
+supports the `couchdb` backend under each target's `livesync` settings.
 
 Minimal example:
 
 ```yaml
 version: 1
 
-plugin: livesync-couchdb
+plugin: livesync
 plugin_settings:
   targets:
     - name: personal
@@ -72,15 +73,16 @@ plugin_settings:
         path: /vault/obsidian-personal
       state:
         path: /var/lib/gobsidian/state/personal.json
-      livesync_couchdb:
-        url: http://couchdb:5984
-        db: obsidian_personal
-        username: root
-        password: ${COUCHDB_PASSWORD}
-        passphrase: ${LIVESYNC_PASSPHRASE}
-        property_obfuscation: true
-        base_dir: ""
-        dry_run: false
+      livesync:
+        couchdb:
+          url: http://couchdb:5984
+          db: obsidian_personal
+          username: root
+          password: ${COUCHDB_PASSWORD}
+          passphrase: ${LIVESYNC_PASSPHRASE}
+          property_obfuscation: true
+          base_dir: ""
+          dry_run: false
 ```
 
 See [config.example.yaml](config.example.yaml) for required fields, optional

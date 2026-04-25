@@ -8,7 +8,7 @@ import (
 
 	"gobsidian-cli/internal/cli"
 	"gobsidian-cli/internal/plugin"
-	"gobsidian-cli/internal/plugins/livesynccouchdb"
+	"gobsidian-cli/internal/plugins/livesync"
 )
 
 func main() {
@@ -19,7 +19,7 @@ func main() {
 	}
 	defer func() { _ = logger.Sync() }()
 	registry := plugin.NewRegistry()
-	if err := livesynccouchdb.Register(registry, logger); err != nil {
+	if err := livesync.Register(registry, logger); err != nil {
 		fmt.Fprintln(os.Stderr, "error:", err)
 		os.Exit(1)
 	}

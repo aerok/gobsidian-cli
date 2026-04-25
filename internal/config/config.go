@@ -24,10 +24,10 @@ type PluginSettings struct {
 }
 
 type Target struct {
-	Name            string                `json:"name" mapstructure:"name"`
-	Vault           VaultConfig           `json:"vault" mapstructure:"vault"`
-	State           StateConfig           `json:"state" mapstructure:"state"`
-	LiveSyncCouchDB LiveSyncCouchDBConfig `json:"livesync_couchdb" mapstructure:"livesync_couchdb"`
+	Name     string         `json:"name" mapstructure:"name"`
+	Vault    VaultConfig    `json:"vault" mapstructure:"vault"`
+	State    StateConfig    `json:"state" mapstructure:"state"`
+	LiveSync LiveSyncConfig `json:"livesync" mapstructure:"livesync"`
 }
 
 type VaultConfig struct {
@@ -38,7 +38,11 @@ type StateConfig struct {
 	Path string `json:"path" mapstructure:"path"`
 }
 
-type LiveSyncCouchDBConfig struct {
+type LiveSyncConfig struct {
+	CouchDB CouchDBConfig `json:"couchdb" mapstructure:"couchdb"`
+}
+
+type CouchDBConfig struct {
 	URL                 string `json:"url" mapstructure:"url"`
 	DB                  string `json:"db" mapstructure:"db"`
 	Username            string `json:"username" mapstructure:"username"`
@@ -129,6 +133,9 @@ func validate(cfg *Config) error {
 	if cfg.Plugin == "" {
 		return fmt.Errorf("plugin is required")
 	}
+	if cfg.Plugin == "livesync-couchdb" {
+		return fmt.Errorf(`plugin "livesync-couchdb" is no longer supported; use plugin "livesync"`)
+	}
 	cfg.Targets = cfg.PluginSettings.Targets
 	if len(cfg.Targets) == 0 {
 		return fmt.Errorf("plugin_settings.targets is required")
@@ -146,12 +153,12 @@ func validate(cfg *Config) error {
 		if target.Vault.Path == "" {
 			return fmt.Errorf("plugin_settings.targets[%d].vault.path is required", i)
 		}
-		if cfg.Plugin == "livesync-couchdb" {
-			if target.LiveSyncCouchDB.URL == "" {
-				return fmt.Errorf("plugin_settings.targets[%d].livesync_couchdb.url is required", i)
+		if cfg.Plugin == "livesync" {
+			if target.LiveSync.CouchDB.URL == "" {
+				return fmt.Errorf("plugin_settings.targets[%d].livesync.couchdb.url is required", i)
 			}
-			if target.LiveSyncCouchDB.DB == "" {
-				return fmt.Errorf("plugin_settings.targets[%d].livesync_couchdb.db is required", i)
+			if target.LiveSync.CouchDB.DB == "" {
+				return fmt.Errorf("plugin_settings.targets[%d].livesync.couchdb.db is required", i)
 			}
 		}
 		cfg.PluginSettings.Targets[i] = *target
@@ -166,12 +173,12 @@ func expandEnv(cfg *Config) {
 		target.Name = os.ExpandEnv(target.Name)
 		target.Vault.Path = os.ExpandEnv(target.Vault.Path)
 		target.State.Path = os.ExpandEnv(target.State.Path)
-		target.LiveSyncCouchDB.URL = os.ExpandEnv(target.LiveSyncCouchDB.URL)
-		target.LiveSyncCouchDB.DB = os.ExpandEnv(target.LiveSyncCouchDB.DB)
-		target.LiveSyncCouchDB.Username = os.ExpandEnv(target.LiveSyncCouchDB.Username)
-		target.LiveSyncCouchDB.Password = os.ExpandEnv(target.LiveSyncCouchDB.Password)
-		target.LiveSyncCouchDB.Passphrase = os.ExpandEnv(target.LiveSyncCouchDB.Passphrase)
-		target.LiveSyncCouchDB.BaseDir = os.ExpandEnv(target.LiveSyncCouchDB.BaseDir)
+		target.LiveSync.CouchDB.URL = os.ExpandEnv(target.LiveSync.CouchDB.URL)
+		target.LiveSync.CouchDB.DB = os.ExpandEnv(target.LiveSync.CouchDB.DB)
+		target.LiveSync.CouchDB.Username = os.ExpandEnv(target.LiveSync.CouchDB.Username)
+		target.LiveSync.CouchDB.Password = os.ExpandEnv(target.LiveSync.CouchDB.Password)
+		target.LiveSync.CouchDB.Passphrase = os.ExpandEnv(target.LiveSync.CouchDB.Passphrase)
+		target.LiveSync.CouchDB.BaseDir = os.ExpandEnv(target.LiveSync.CouchDB.BaseDir)
 	}
 }
 

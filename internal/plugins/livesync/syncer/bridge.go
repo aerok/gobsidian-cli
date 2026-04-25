@@ -11,16 +11,16 @@ import (
 	"strings"
 	"time"
 
-	"gobsidian-cli/internal/plugins/livesynccouchdb/couchdb"
-	"gobsidian-cli/internal/plugins/livesynccouchdb/livesync"
-	"gobsidian-cli/internal/plugins/livesynccouchdb/vault"
+	"gobsidian-cli/internal/plugins/livesync/couchdb"
+	"gobsidian-cli/internal/plugins/livesync/protocol"
+	"gobsidian-cli/internal/plugins/livesync/vault"
 )
 
 type CouchStore interface {
 	Changes(context.Context, string) ([]couchdb.Change, string, error)
-	FetchRecords(context.Context) ([]livesync.Record, error)
-	FetchRecordsByID(context.Context, []string) ([]livesync.Record, error)
-	BulkWrite(context.Context, []livesync.Record) (map[string]string, error)
+	FetchRecords(context.Context) ([]protocol.Record, error)
+	FetchRecordsByID(context.Context, []string) ([]protocol.Record, error)
+	BulkWrite(context.Context, []protocol.Record) (map[string]string, error)
 }
 
 type BridgeOptions struct {
@@ -189,7 +189,7 @@ func pullRemote(ctx context.Context, store CouchStore, opts BridgeOptions, local
 	if err != nil {
 		return err
 	}
-	codec := livesync.NewCodec(livesync.CodecOptions{
+	codec := protocol.NewCodec(protocol.CodecOptions{
 		Passphrase:          opts.Passphrase,
 		PBKDF2Salt:          opts.PBKDF2Salt,
 		PropertyObfuscation: opts.PropertyObfuscation,
@@ -202,7 +202,7 @@ func pullRemote(ctx context.Context, store CouchStore, opts BridgeOptions, local
 }
 
 func pullRemoteChanges(ctx context.Context, store CouchStore, opts BridgeOptions, changes []couchdb.Change, localBefore map[string]vault.File, state *State) error {
-	records := make([]livesync.Record, 0, len(changes))
+	records := make([]protocol.Record, 0, len(changes))
 	missingChangeIDs := []string{}
 	for _, change := range changes {
 		if change.Deleted {
@@ -224,7 +224,7 @@ func pullRemoteChanges(ctx context.Context, store CouchStore, opts BridgeOptions
 	if len(records) == 0 {
 		return nil
 	}
-	codec := livesync.NewCodec(livesync.CodecOptions{
+	codec := protocol.NewCodec(protocol.CodecOptions{
 		Passphrase:          opts.Passphrase,
 		PBKDF2Salt:          opts.PBKDF2Salt,
 		PropertyObfuscation: opts.PropertyObfuscation,
@@ -248,7 +248,7 @@ func pullRemoteChanges(ctx context.Context, store CouchStore, opts BridgeOptions
 	return applyRemoteRecords(records, opts, localBefore, state)
 }
 
-func missingChunksForChangedDocs(records []livesync.Record) []string {
+func missingChunksForChangedDocs(records []protocol.Record) []string {
 	available := map[string]bool{}
 	for _, record := range records {
 		if record.Chunk != nil {
@@ -275,12 +275,12 @@ func missingChunksForChangedDocs(records []livesync.Record) []string {
 	return out
 }
 
-func applyRemoteRecords(records []livesync.Record, opts BridgeOptions, localBefore map[string]vault.File, state *State) error {
-	projector := livesync.NewProjector()
+func applyRemoteRecords(records []protocol.Record, opts BridgeOptions, localBefore map[string]vault.File, state *State) error {
+	projector := protocol.NewProjector()
 	if err := projector.Apply(records); err != nil {
 		return err
 	}
-	remoteDocs := map[string]livesync.Document{}
+	remoteDocs := map[string]protocol.Document{}
 	for _, record := range records {
 		if record.Document == nil || record.Document.Path == "" {
 			continue
@@ -349,7 +349,7 @@ func applyCouchDeletedChanges(changes []couchdb.Change, opts BridgeOptions, loca
 	return vault.WriteSnapshot(opts.Root, snapshot)
 }
 
-func buildLocalRecords(files map[string]vault.File, state State, opts BridgeOptions) ([]livesync.Record, State, error) {
+func buildLocalRecords(files map[string]vault.File, state State, opts BridgeOptions) ([]protocol.Record, State, error) {
 	next := state.Clone()
 	if next.Files == nil {
 		next.Files = map[string]FileState{}
@@ -360,8 +360,8 @@ func buildLocalRecords(files map[string]vault.File, state State, opts BridgeOpti
 	}
 	sort.Strings(paths)
 
-	var records []livesync.Record
-	codec := livesync.NewCodec(livesync.CodecOptions{
+	var records []protocol.Record
+	codec := protocol.NewCodec(protocol.CodecOptions{
 		Passphrase:          opts.Passphrase,
 		PBKDF2Salt:          opts.PBKDF2Salt,
 		PropertyObfuscation: opts.PropertyObfuscation,
@@ -381,13 +381,13 @@ func buildLocalRecords(files map[string]vault.File, state State, opts BridgeOpti
 			return nil, state, err
 		}
 		chunkID := chunk.ID
-		records = append(records, livesync.Record{Chunk: &chunk})
+		records = append(records, protocol.Record{Chunk: &chunk})
 		previous := state.Files[localPath]
 		docID := previous.DocID
 		if docID == "" {
 			docID = pathToID(remotePath, opts.Passphrase, opts.PropertyObfuscation)
 		}
-		doc := &livesync.Document{
+		doc := &protocol.Document{
 			ID:       docID,
 			Rev:      previous.RemoteRev,
 			Path:     remotePath,
@@ -396,7 +396,7 @@ func buildLocalRecords(files map[string]vault.File, state State, opts BridgeOpti
 			Size:     int64(len(file.Content)),
 			Type:     "plain",
 			Children: []string{chunkID},
-			Eden:     map[string]livesync.EdenChunk{},
+			Eden:     map[string]protocol.EdenChunk{},
 		}
 		encodedDoc, err := codec.EncodeDocument(*doc)
 		if err != nil {
@@ -404,7 +404,7 @@ func buildLocalRecords(files map[string]vault.File, state State, opts BridgeOpti
 		}
 		doc = &encodedDoc
 		docID = doc.ID
-		records = append(records, livesync.Record{Document: doc})
+		records = append(records, protocol.Record{Document: doc})
 		next.Files[localPath] = FileState{
 			Hash:      hash,
 			DocID:     docID,
@@ -428,7 +428,7 @@ func buildLocalRecords(files map[string]vault.File, state State, opts BridgeOpti
 			continue
 		}
 		remotePath := toRemotePath(localPath, opts.BaseDir)
-		doc := livesync.Document{
+		doc := protocol.Document{
 			ID:       previous.DocID,
 			Rev:      previous.RemoteRev,
 			Path:     remotePath,
@@ -436,13 +436,13 @@ func buildLocalRecords(files map[string]vault.File, state State, opts BridgeOpti
 			Type:     "plain",
 			Deleted:  true,
 			DeletedP: true,
-			Eden:     map[string]livesync.EdenChunk{},
+			Eden:     map[string]protocol.EdenChunk{},
 		}
 		encodedDoc, err := codec.EncodeDocument(doc)
 		if err != nil {
 			return nil, state, err
 		}
-		records = append(records, livesync.Record{Document: &encodedDoc})
+		records = append(records, protocol.Record{Document: &encodedDoc})
 		delete(next.Files, localPath)
 	}
 	return records, next, nil
@@ -499,7 +499,7 @@ func hashBytes(data []byte) string {
 	return hex.EncodeToString(sum[:])
 }
 
-func conflictFile(localPath string, remoteFile livesync.File, localBefore map[string]vault.File, state State, remoteDoc livesync.Document, nowMillis int64) (vault.File, bool) {
+func conflictFile(localPath string, remoteFile protocol.File, localBefore map[string]vault.File, state State, remoteDoc protocol.Document, nowMillis int64) (vault.File, bool) {
 	previous, tracked := state.Files[localPath]
 	localFile, exists := localBefore[localPath]
 	if !exists {
@@ -549,7 +549,7 @@ func makeConflictPath(localPath string, nowMillis int64) string {
 
 func pathToID(path, passphrase string, enabled bool) string {
 	if enabled && passphrase != "" {
-		return livesync.PathToID(path, passphrase)
+		return protocol.PathToID(path, passphrase)
 	}
 	if strings.HasPrefix(path, "_") {
 		return "/" + path

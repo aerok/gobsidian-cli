@@ -4,8 +4,8 @@ version: 1
 
 # Required. Sync plugin used by every target in this config file.
 # Default: none.
-# Supported in v1: "livesync-couchdb".
-plugin: livesync-couchdb
+# Supported in v1: "livesync".
+plugin: livesync
 
 # Required. Plugin-specific settings.
 # Default: none.
@@ -28,50 +28,52 @@ plugin_settings:
         # Default: "<vault.path>/.gobsidian/state.json".
         path: /var/lib/gobsidian/state/personal.json
 
-      livesync_couchdb:
-        # Required. CouchDB base URL.
-        # Default: none.
-        url: http://couchdb:5984
+      livesync:
+        couchdb:
+          # Required. CouchDB base URL.
+          # Default: none.
+          url: http://couchdb:5984
 
-        # Required. CouchDB database name used by Obsidian LiveSync.
-        # Default: none.
-        db: obsidian_personal
+          # Required. CouchDB database name used by Obsidian LiveSync.
+          # Default: none.
+          db: obsidian_personal
 
-        # Optional. CouchDB username. Required only when CouchDB auth is enabled.
-        # Default: "".
-        username: root
+          # Optional. CouchDB username. Required only when CouchDB auth is enabled.
+          # Default: "".
+          username: root
 
-        # Optional. CouchDB password. Environment variables are expanded.
-        # Default: "".
-        password: ${COUCHDB_PASSWORD}
+          # Optional. CouchDB password. Environment variables are expanded.
+          # Default: "".
+          password: ${COUCHDB_PASSWORD}
 
-        # Optional. Obsidian LiveSync E2EE passphrase. Leave empty for unencrypted DBs.
-        # Default: "".
-        passphrase: ${LIVESYNC_PASSPHRASE}
+          # Optional. Obsidian LiveSync E2EE passphrase. Leave empty for unencrypted DBs.
+          # Default: "".
+          passphrase: ${LIVESYNC_PASSPHRASE}
 
-        # Optional. Set true only when LiveSync property obfuscation is enabled.
-        # Default: false.
-        property_obfuscation: true
+          # Optional. Set true only when LiveSync property obfuscation is enabled.
+          # Default: false.
+          property_obfuscation: true
 
-        # Optional. Remote path prefix to sync and strip locally.
-        # Default: "".
-        base_dir: ""
+          # Optional. Remote path prefix to sync and strip locally.
+          # Default: "".
+          base_dir: ""
 
-        # Optional. Compute changes without writing local files or CouchDB docs.
-        # Default: false.
-        dry_run: false
+          # Optional. Compute changes without writing local files or CouchDB docs.
+          # Default: false.
+          dry_run: false
 
     - name: work
       vault:
         path: /vault/obsidian-work
       state:
         path: /var/lib/gobsidian/state/work.json
-      livesync_couchdb:
-        url: http://couchdb:5984
-        db: obsidian_work
-        username: root
-        password: ${COUCHDB_PASSWORD}
-        passphrase: ${LIVESYNC_PASSPHRASE}
-        property_obfuscation: true
-        base_dir: ""
-        dry_run: false
+      livesync:
+        couchdb:
+          url: http://couchdb:5984
+          db: obsidian_work
+          username: root
+          password: ${COUCHDB_PASSWORD}
+          passphrase: ${LIVESYNC_PASSPHRASE}
+          property_obfuscation: true
+          base_dir: ""
+          dry_run: false

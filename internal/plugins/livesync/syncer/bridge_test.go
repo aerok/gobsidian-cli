@@ -9,17 +9,17 @@ import (
 	"testing"
 	"time"
 
-	"gobsidian-cli/internal/plugins/livesynccouchdb/couchdb"
-	"gobsidian-cli/internal/plugins/livesynccouchdb/livesync"
+	"gobsidian-cli/internal/plugins/livesync/couchdb"
+	"gobsidian-cli/internal/plugins/livesync/protocol"
 )
 
 func TestRunBridgeOncePullsRemoteAndSuppressesLoopback(t *testing.T) {
 	root := t.TempDir()
 	statePath := filepath.Join(root, ".gobsidian", "state.json")
 	store := &memoryCouch{
-		records: []livesync.Record{
-			{Chunk: &livesync.Chunk{ID: "h:remote", Data: "remote"}},
-			{Document: &livesync.Document{ID: "notes/remote.md", Rev: "1-a", Path: "notes/remote.md", Type: "plain", Children: []string{"h:remote"}, Eden: map[string]livesync.EdenChunk{}}},
+		records: []protocol.Record{
+			{Chunk: &protocol.Chunk{ID: "h:remote", Data: "remote"}},
+			{Document: &protocol.Document{ID: "notes/remote.md", Rev: "1-a", Path: "notes/remote.md", Type: "plain", Children: []string{"h:remote"}, Eden: map[string]protocol.EdenChunk{}}},
 		},
 		lastSeq: "1",
 	}
@@ -50,9 +50,9 @@ func TestRunBridgeOncePreservesUntrackedLocalFileOnInitialPull(t *testing.T) {
 		t.Fatalf("WriteFile note: %v", err)
 	}
 	store := &memoryCouch{
-		records: []livesync.Record{
-			{Chunk: &livesync.Chunk{ID: "h:remote", Data: "remote version"}},
-			{Document: &livesync.Document{ID: "note.md", Rev: "1-remote", Path: "note.md", Type: "plain", Children: []string{"h:remote"}, Eden: map[string]livesync.EdenChunk{}}},
+		records: []protocol.Record{
+			{Chunk: &protocol.Chunk{ID: "h:remote", Data: "remote version"}},
+			{Document: &protocol.Document{ID: "note.md", Rev: "1-remote", Path: "note.md", Type: "plain", Children: []string{"h:remote"}, Eden: map[string]protocol.EdenChunk{}}},
 		},
 		lastSeq: "1",
 	}
@@ -167,14 +167,14 @@ func TestRunBridgeOncePullsEncryptedObfuscatedRemote(t *testing.T) {
 	statePath := filepath.Join(root, ".gobsidian", "state.json")
 	salt := testSalt()
 	store := &memoryCouch{
-		records: []livesync.Record{
-			{Chunk: &livesync.Chunk{ID: "h:+abc", Data: "%=2ddutJwgMpXQlzFu2rWmkY+TBYd+vxpRI+jH3CPZOHBi2oBrfBfsk/VFXfpbW2L3IusvpHqGYf9LcLWxNulfD2GtyG6QkYIuc55Eog==", Encrypted: true}},
-			{Document: &livesync.Document{
+		records: []protocol.Record{
+			{Chunk: &protocol.Chunk{ID: "h:+abc", Data: "%=2ddutJwgMpXQlzFu2rWmkY+TBYd+vxpRI+jH3CPZOHBi2oBrfBfsk/VFXfpbW2L3IusvpHqGYf9LcLWxNulfD2GtyG6QkYIuc55Eog==", Encrypted: true}},
+			{Document: &protocol.Document{
 				ID:   "f:fixture",
 				Rev:  "1-a",
 				Path: `/\:%=6U6h8BFVlSp77qa6FAvVQqeJ3LRxfuDtwsphI5SNdYH9xA7lP7m24JCaHRwVGEiCa++aeNAzSzqK0AgbNWcFE6rTJ0utK8mEK14Mw8LMOWWpE226bFmZVrI8oTN0St0CFZuAZBBeGD8TVbk/k90+7Tx2wydd8os/1zTqpkjRpu+YyjnLjcw868uGzaZJ`,
 				Type: "plain",
-				Eden: map[string]livesync.EdenChunk{},
+				Eden: map[string]protocol.EdenChunk{},
 			}},
 		},
 		lastSeq: "1",
@@ -251,7 +251,7 @@ func TestRunBridgeOncePushesEncryptedObfuscatedLocalDelete(t *testing.T) {
 		Files: map[string]FileState{
 			"secret/note.md": {
 				Hash:      hashBytes([]byte("old")),
-				DocID:     livesync.PathToID("secret/note.md", "secret-pass"),
+				DocID:     protocol.PathToID("secret/note.md", "secret-pass"),
 				RemoteRev: "1-old",
 			},
 		},
@@ -376,9 +376,9 @@ func TestRunBridgeOncePreservesLocalConflictWhenRemoteAlsoChanged(t *testing.T) 
 	store := &memoryCouch{
 		changes: []couchdb.Change{{ID: "note.md", Seq: "2"}},
 		lastSeq: "2",
-		records: []livesync.Record{
-			{Chunk: &livesync.Chunk{ID: "h:remote", Data: "remote edit"}},
-			{Document: &livesync.Document{ID: "note.md", Rev: "2-remote", Path: "note.md", Type: "plain", Children: []string{"h:remote"}, Eden: map[string]livesync.EdenChunk{}}},
+		records: []protocol.Record{
+			{Chunk: &protocol.Chunk{ID: "h:remote", Data: "remote edit"}},
+			{Document: &protocol.Document{ID: "note.md", Rev: "2-remote", Path: "note.md", Type: "plain", Children: []string{"h:remote"}, Eden: map[string]protocol.EdenChunk{}}},
 		},
 	}
 	if err := RunBridgeOnce(context.Background(), store, BridgeOptions{Root: root, StatePath: statePath, NowMillis: 6000}); err != nil {
@@ -414,8 +414,8 @@ func TestRunBridgeOnceUsesChangesForIncrementalRemotePull(t *testing.T) {
 	}
 	store := &memoryCouch{
 		changes: []couchdb.Change{
-			{ID: "h:new", Seq: "2", Record: livesync.Record{Chunk: &livesync.Chunk{ID: "h:new", Data: "remote incremental"}}},
-			{ID: "note.md", Seq: "3", Record: livesync.Record{Document: &livesync.Document{ID: "note.md", Rev: "2-remote", Path: "note.md", Type: "plain", Children: []string{"h:new"}, Eden: map[string]livesync.EdenChunk{}}}},
+			{ID: "h:new", Seq: "2", Record: protocol.Record{Chunk: &protocol.Chunk{ID: "h:new", Data: "remote incremental"}}},
+			{ID: "note.md", Seq: "3", Record: protocol.Record{Document: &protocol.Document{ID: "note.md", Rev: "2-remote", Path: "note.md", Type: "plain", Children: []string{"h:new"}, Eden: map[string]protocol.EdenChunk{}}}},
 		},
 		lastSeq: "3",
 	}
@@ -444,9 +444,9 @@ func TestRunBridgeOnceFetchesMissingChunksForIncrementalDocChange(t *testing.T) 
 	}
 	store := &memoryCouch{
 		changes: []couchdb.Change{
-			{ID: "note.md", Seq: "2", Record: livesync.Record{Document: &livesync.Document{ID: "note.md", Rev: "2-remote", Path: "note.md", Type: "plain", Children: []string{"h:existing"}, Eden: map[string]livesync.EdenChunk{}}}},
+			{ID: "note.md", Seq: "2", Record: protocol.Record{Document: &protocol.Document{ID: "note.md", Rev: "2-remote", Path: "note.md", Type: "plain", Children: []string{"h:existing"}, Eden: map[string]protocol.EdenChunk{}}}},
 		},
-		records: []livesync.Record{{Chunk: &livesync.Chunk{ID: "h:existing", Data: "remote via fetched chunk"}}},
+		records: []protocol.Record{{Chunk: &protocol.Chunk{ID: "h:existing", Data: "remote via fetched chunk"}}},
 		lastSeq: "2",
 	}
 	if err := RunBridgeOnce(context.Background(), store, BridgeOptions{Root: root, StatePath: statePath, NowMillis: 9100}); err != nil {
@@ -480,18 +480,18 @@ func TestRunBridgeOnceFetchesRemoteChunkEvenWhenChangedDocHasEden(t *testing.T) 
 	}
 	store := &memoryCouch{
 		changes: []couchdb.Change{
-			{ID: "note.md", Seq: "2", Record: livesync.Record{Document: &livesync.Document{
+			{ID: "note.md", Seq: "2", Record: protocol.Record{Document: &protocol.Document{
 				ID:       "note.md",
 				Rev:      "2-remote",
 				Path:     "note.md",
 				Type:     "plain",
 				Children: []string{"h:new"},
-				Eden: map[string]livesync.EdenChunk{
+				Eden: map[string]protocol.EdenChunk{
 					"h:new": {Data: "stale eden data", Epoch: 1},
 				},
 			}}},
 		},
-		records: []livesync.Record{{Chunk: &livesync.Chunk{ID: "h:new", Data: "new remote content"}}},
+		records: []protocol.Record{{Chunk: &protocol.Chunk{ID: "h:new", Data: "new remote content"}}},
 		lastSeq: "2",
 	}
 	if err := RunBridgeOnce(context.Background(), store, BridgeOptions{Root: root, StatePath: statePath, NowMillis: 9200}); err != nil {
@@ -549,11 +549,11 @@ func TestRunBridgeLoopDoesNotRewriteWithoutChanges(t *testing.T) {
 }
 
 type memoryCouch struct {
-	records        []livesync.Record
+	records        []protocol.Record
 	changes        []couchdb.Change
 	lastSeq        string
 	revs           map[string]string
-	written        []livesync.Record
+	written        []protocol.Record
 	fetchAllCalls  int
 	fetchByIDCalls int
 }
@@ -562,15 +562,15 @@ type trackingCouch struct {
 	seq       int
 	lastSeq   string
 	changes   []couchdb.Change
-	records   []livesync.Record
-	documents map[string]*livesync.Document
-	chunks    map[string]*livesync.Chunk
+	records   []protocol.Record
+	documents map[string]*protocol.Document
+	chunks    map[string]*protocol.Chunk
 }
 
 func newTrackingCouch() *trackingCouch {
 	return &trackingCouch{
-		documents: map[string]*livesync.Document{},
-		chunks:    map[string]*livesync.Chunk{},
+		documents: map[string]*protocol.Document{},
+		chunks:    map[string]*protocol.Chunk{},
 		lastSeq:   "0",
 	}
 }
@@ -582,18 +582,18 @@ func (m *trackingCouch) Changes(_ context.Context, since string) ([]couchdb.Chan
 	return m.changes, m.lastSeq, nil
 }
 
-func (m *trackingCouch) FetchRecords(context.Context) ([]livesync.Record, error) {
-	records := make([]livesync.Record, 0, len(m.chunks)+len(m.documents))
+func (m *trackingCouch) FetchRecords(context.Context) ([]protocol.Record, error) {
+	records := make([]protocol.Record, 0, len(m.chunks)+len(m.documents))
 	for _, chunk := range m.chunks {
-		records = append(records, livesync.Record{Chunk: chunk})
+		records = append(records, protocol.Record{Chunk: chunk})
 	}
 	for _, doc := range m.documents {
-		records = append(records, livesync.Record{Document: doc})
+		records = append(records, protocol.Record{Document: doc})
 	}
 	return records, nil
 }
 
-func (m *trackingCouch) FetchRecordsByID(ctx context.Context, ids []string) ([]livesync.Record, error) {
+func (m *trackingCouch) FetchRecordsByID(ctx context.Context, ids []string) ([]protocol.Record, error) {
 	all, err := m.FetchRecords(ctx)
 	if err != nil {
 		return nil, err
@@ -601,7 +601,7 @@ func (m *trackingCouch) FetchRecordsByID(ctx context.Context, ids []string) ([]l
 	return filterRecordsByID(all, ids), nil
 }
 
-func (m *trackingCouch) BulkWrite(_ context.Context, records []livesync.Record) (map[string]string, error) {
+func (m *trackingCouch) BulkWrite(_ context.Context, records []protocol.Record) (map[string]string, error) {
 	out := map[string]string{}
 	m.changes = nil
 	for _, record := range records {
@@ -611,7 +611,7 @@ func (m *trackingCouch) BulkWrite(_ context.Context, records []livesync.Record) 
 			chunk := *record.Chunk
 			m.chunks[chunk.ID] = &chunk
 			out[chunk.ID] = "1-chunk"
-			m.changes = append(m.changes, couchdb.Change{ID: chunk.ID, Seq: seq, Record: livesync.Record{Chunk: &chunk}})
+			m.changes = append(m.changes, couchdb.Change{ID: chunk.ID, Seq: seq, Record: protocol.Record{Chunk: &chunk}})
 			continue
 		}
 		if record.Document != nil {
@@ -619,7 +619,7 @@ func (m *trackingCouch) BulkWrite(_ context.Context, records []livesync.Record) 
 			doc.Rev = strconv.Itoa(m.seq) + "-doc"
 			m.documents[doc.ID] = &doc
 			out[doc.ID] = doc.Rev
-			m.changes = append(m.changes, couchdb.Change{ID: doc.ID, Seq: seq, Deleted: doc.IsDeleted(), Record: livesync.Record{Document: &doc}})
+			m.changes = append(m.changes, couchdb.Change{ID: doc.ID, Seq: seq, Deleted: doc.IsDeleted(), Record: protocol.Record{Document: &doc}})
 		}
 		m.lastSeq = seq
 	}
@@ -630,41 +630,41 @@ func (m *memoryCouch) Changes(context.Context, string) ([]couchdb.Change, string
 	return m.changes, m.lastSeq, nil
 }
 
-func (m *memoryCouch) FetchRecords(context.Context) ([]livesync.Record, error) {
+func (m *memoryCouch) FetchRecords(context.Context) ([]protocol.Record, error) {
 	m.fetchAllCalls++
 	return m.records, nil
 }
 
-func (m *memoryCouch) FetchRecordsByID(_ context.Context, ids []string) ([]livesync.Record, error) {
+func (m *memoryCouch) FetchRecordsByID(_ context.Context, ids []string) ([]protocol.Record, error) {
 	m.fetchByIDCalls++
 	return filterRecordsByID(m.records, ids), nil
 }
 
-func (m *memoryCouch) BulkWrite(_ context.Context, records []livesync.Record) (map[string]string, error) {
+func (m *memoryCouch) BulkWrite(_ context.Context, records []protocol.Record) (map[string]string, error) {
 	m.written = append(m.written, records...)
 	out := map[string]string{}
 	for _, record := range records {
 		if record.Chunk != nil {
 			out[record.Chunk.ID] = "1-chunk"
-			m.records = append(m.records, livesync.Record{Chunk: record.Chunk})
+			m.records = append(m.records, protocol.Record{Chunk: record.Chunk})
 			continue
 		}
 		if record.Document != nil {
 			out[record.Document.ID] = "2-written"
 			doc := *record.Document
 			doc.Rev = "2-written"
-			m.records = append(m.records, livesync.Record{Document: &doc})
+			m.records = append(m.records, protocol.Record{Document: &doc})
 		}
 	}
 	return out, nil
 }
 
-func filterRecordsByID(records []livesync.Record, ids []string) []livesync.Record {
+func filterRecordsByID(records []protocol.Record, ids []string) []protocol.Record {
 	needed := map[string]bool{}
 	for _, id := range ids {
 		needed[id] = true
 	}
-	var out []livesync.Record
+	var out []protocol.Record
 	for _, record := range records {
 		switch {
 		case record.Chunk != nil && needed[record.Chunk.ID]:

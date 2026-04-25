@@ -1,4 +1,4 @@
-package livesynccouchdb
+package livesync
 
 import (
 	"path/filepath"
@@ -7,7 +7,7 @@ import (
 	"go.uber.org/zap"
 
 	"gobsidian-cli/internal/config"
-	"gobsidian-cli/internal/plugins/livesynccouchdb/syncer"
+	"gobsidian-cli/internal/plugins/livesync/syncer"
 )
 
 func TestStatusReadsStateAndDefaultsStatePath(t *testing.T) {

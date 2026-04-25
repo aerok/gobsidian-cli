@@ -1,4 +1,4 @@
-package livesync
+package protocol
 
 type EdenChunk struct {
 	Data  string `json:"data"`

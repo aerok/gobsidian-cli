@@ -11,7 +11,7 @@ import (
 
 	"github.com/go-resty/resty/v2"
 
-	"gobsidian-cli/internal/plugins/livesynccouchdb/livesync"
+	"gobsidian-cli/internal/plugins/livesync/protocol"
 )
 
 type Config struct {
@@ -44,7 +44,7 @@ type Change struct {
 	ID      string
 	Seq     string
 	Deleted bool
-	Record  livesync.Record
+	Record  protocol.Record
 }
 
 func (c *Client) Changes(ctx context.Context, since string) ([]Change, string, error) {
@@ -90,7 +90,7 @@ func (c *Client) Changes(ctx context.Context, since string) ([]Change, string, e
 	return changes, rawSeqString(out.LastSeq), nil
 }
 
-func (c *Client) FetchRecords(ctx context.Context) ([]livesync.Record, error) {
+func (c *Client) FetchRecords(ctx context.Context) ([]protocol.Record, error) {
 	resp, err := c.httpClient.R().
 		SetContext(ctx).
 		SetQueryParam("include_docs", "true").
@@ -105,7 +105,7 @@ func (c *Client) FetchRecords(ctx context.Context) ([]livesync.Record, error) {
 	if err := json.Unmarshal(resp.Body(), &out); err != nil {
 		return nil, err
 	}
-	records := make([]livesync.Record, 0, len(out.Rows))
+	records := make([]protocol.Record, 0, len(out.Rows))
 	for _, row := range out.Rows {
 		if len(row.Doc) == 0 {
 			continue
@@ -123,7 +123,7 @@ func (c *Client) FetchRecords(ctx context.Context) ([]livesync.Record, error) {
 	return records, nil
 }
 
-func (c *Client) FetchRecordsByID(ctx context.Context, ids []string) ([]livesync.Record, error) {
+func (c *Client) FetchRecordsByID(ctx context.Context, ids []string) ([]protocol.Record, error) {
 	if len(ids) == 0 {
 		return nil, nil
 	}
@@ -142,7 +142,7 @@ func (c *Client) FetchRecordsByID(ctx context.Context, ids []string) ([]livesync
 	if err := json.Unmarshal(resp.Body(), &out); err != nil {
 		return nil, err
 	}
-	records := make([]livesync.Record, 0, len(out.Rows))
+	records := make([]protocol.Record, 0, len(out.Rows))
 	for _, row := range out.Rows {
 		if len(row.Doc) == 0 {
 			continue
@@ -203,7 +203,7 @@ func (c *Client) SyncParameters(ctx context.Context) ([]byte, error) {
 	return salt, nil
 }
 
-func (c *Client) BulkWrite(ctx context.Context, records []livesync.Record) (map[string]string, error) {
+func (c *Client) BulkWrite(ctx context.Context, records []protocol.Record) (map[string]string, error) {
 	reqBody := bulkDocsRequest{Docs: make([]map[string]any, 0, len(records))}
 	revs := map[string]string{}
 	for _, record := range records {
@@ -312,23 +312,23 @@ type bulkDocsResponse struct {
 	Reason string `json:"reason,omitempty"`
 }
 
-func decodeRecord(doc map[string]any) (livesync.Record, error) {
+func decodeRecord(doc map[string]any) (protocol.Record, error) {
 	id, _ := doc["_id"].(string)
 	typ, _ := doc["type"].(string)
 	if strings.HasPrefix(id, "h:") || typ == "leaf" {
 		data, _ := doc["data"].(string)
 		encrypted, _ := doc["e_"].(bool)
-		return livesync.Record{Chunk: &livesync.Chunk{ID: id, Data: data, Encrypted: encrypted}}, nil
+		return protocol.Record{Chunk: &protocol.Chunk{ID: id, Data: data, Encrypted: encrypted}}, nil
 	}
 	raw, err := json.Marshal(doc)
 	if err != nil {
-		return livesync.Record{}, err
+		return protocol.Record{}, err
 	}
-	var liveDoc livesync.Document
+	var liveDoc protocol.Document
 	if err := json.Unmarshal(raw, &liveDoc); err != nil {
-		return livesync.Record{}, err
+		return protocol.Record{}, err
 	}
-	return livesync.Record{Document: &liveDoc}, nil
+	return protocol.Record{Document: &liveDoc}, nil
 }
 
 func skipDocID(id string) bool {

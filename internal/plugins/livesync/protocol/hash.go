@@ -1,4 +1,4 @@
-package livesync
+package protocol
 
 import (
 	"strconv"
