@@ -1,6 +1,6 @@
 ---
 name: gobsidian-cli
-description: Use this skill when an agent needs to work with an Obsidian vault through the gobsidian CLI: sync LiveSync CouchDB data, check status, search notes, read token-friendly note slices, list files, move notes, or edit frontmatter.
+description: "Use this skill when an agent needs to work with an Obsidian vault through the gobsidian CLI: sync LiveSync CouchDB data, check status, search notes, read token-friendly note slices, list files, move notes, or edit frontmatter."
 ---
 
 # gobsidian-cli
