@@ -1,0 +1,74 @@
+name: Release gobsidian
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Build and publish release
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: go.sum
+
+      - name: Test
+        run: go test ./...
+
+      - name: Vet
+        run: go vet ./...
+
+      - name: Build release archives
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          version="${GITHUB_REF_NAME#v}"
+          out_dir="dist"
+          mkdir -p "${out_dir}"
+
+          build_one() {
+            local goos="$1"
+            local goarch="$2"
+            local name="gobsidian_${version}_${goos}_${goarch}"
+            local bin_dir="${out_dir}/${name}"
+
+            mkdir -p "${bin_dir}"
+            GOOS="${goos}" GOARCH="${goarch}" CGO_ENABLED=0 \
+              go build \
+                -trimpath \
+                -ldflags="-s -w" \
+                -o "${bin_dir}/gobsidian" \
+                ./cmd/gobsidian
+
+            tar -C "${out_dir}" -czf "${out_dir}/${name}.tar.gz" "${name}"
+            rm -rf "${bin_dir}"
+          }
+
+          build_one linux amd64
+          build_one linux arm64
+          build_one darwin amd64
+          build_one darwin arm64
+
+          cd "${out_dir}"
+          sha256sum *.tar.gz > checksums.txt
+
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: gobsidian ${{ github.ref_name }}
+          files: |
+            dist/*.tar.gz
+            dist/checksums.txt
+          generate_release_notes: true

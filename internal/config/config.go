@@ -1,0 +1,184 @@
+package config
+
+import (
+	"fmt"
+	"os"
+	"path/filepath"
+	"strings"
+
+	"github.com/go-viper/mapstructure/v2"
+	"github.com/spf13/viper"
+)
+
+const CurrentVersion = 1
+
+type Config struct {
+	Version        int            `json:"version" mapstructure:"version"`
+	Plugin         string         `json:"plugin" mapstructure:"plugin"`
+	PluginSettings PluginSettings `json:"plugin_settings" mapstructure:"plugin_settings"`
+	Targets        []Target       `json:"-" mapstructure:"-"`
+}
+
+type PluginSettings struct {
+	Targets []Target `json:"targets" mapstructure:"targets"`
+}
+
+type Target struct {
+	Name            string                `json:"name" mapstructure:"name"`
+	Vault           VaultConfig           `json:"vault" mapstructure:"vault"`
+	State           StateConfig           `json:"state" mapstructure:"state"`
+	LiveSyncCouchDB LiveSyncCouchDBConfig `json:"livesync_couchdb" mapstructure:"livesync_couchdb"`
+}
+
+type VaultConfig struct {
+	Path string `json:"path" mapstructure:"path"`
+}
+
+type StateConfig struct {
+	Path string `json:"path" mapstructure:"path"`
+}
+
+type LiveSyncCouchDBConfig struct {
+	URL                 string `json:"url" mapstructure:"url"`
+	DB                  string `json:"db" mapstructure:"db"`
+	Username            string `json:"username" mapstructure:"username"`
+	Password            string `json:"password" mapstructure:"password"`
+	Passphrase          string `json:"passphrase" mapstructure:"passphrase"`
+	PropertyObfuscation bool   `json:"property_obfuscation" mapstructure:"property_obfuscation"`
+	BaseDir             string `json:"base_dir" mapstructure:"base_dir"`
+	DryRun              bool   `json:"dry_run" mapstructure:"dry_run"`
+}
+
+func Load(path string) (Config, error) {
+	v := viper.New()
+	v.SetConfigFile(path)
+	v.SetConfigType(configType(path))
+	var cfg Config
+	if err := v.ReadInConfig(); err != nil {
+		return Config{}, err
+	}
+	if err := v.Unmarshal(&cfg, func(dc *mapstructure.DecoderConfig) {
+		dc.TagName = "mapstructure"
+		dc.ErrorUnused = true
+	}); err != nil {
+		return Config{}, err
+	}
+	expandEnv(&cfg)
+	if err := validate(&cfg); err != nil {
+		return Config{}, err
+	}
+	return cfg, nil
+}
+
+func ResolvePath(explicit string) (string, error) {
+	return ResolvePathWithRoots(explicit, "/etc")
+}
+
+func ResolvePathWithRoots(explicit, etcRoot string) (string, error) {
+	if explicit != "" {
+		return explicit, nil
+	}
+	candidates := []string{}
+	if home, err := os.UserHomeDir(); err == nil && home != "" {
+		candidates = append(candidates, filepath.Join(home, ".gobsidian", "config.yaml"))
+	}
+	candidates = append(candidates,
+		filepath.Join(etcRoot, "gobsidian", "config.yaml"),
+		filepath.Join(mustGetwd(), "config.yaml"),
+	)
+	for _, candidate := range candidates {
+		if _, err := os.Stat(candidate); err == nil {
+			return candidate, nil
+		} else if !os.IsNotExist(err) {
+			return "", err
+		}
+	}
+	return "", fmt.Errorf("config file not found; searched ~/.gobsidian/config.yaml, %s, and ./config.yaml", filepath.Join(etcRoot, "gobsidian", "config.yaml"))
+}
+
+func (c Config) FilterTargets(name string) (Config, error) {
+	if name == "" {
+		return c, nil
+	}
+	for _, target := range c.Targets {
+		if target.Name == name {
+			return Config{Version: c.Version, Plugin: c.Plugin, PluginSettings: c.PluginSettings, Targets: []Target{target}}, nil
+		}
+	}
+	return Config{}, fmt.Errorf("vault %q not found", name)
+}
+
+func configType(path string) string {
+	switch {
+	case strings.HasSuffix(path, ".json"):
+		return "json"
+	case strings.HasSuffix(path, ".toml"):
+		return "toml"
+	default:
+		return "yaml"
+	}
+}
+
+func validate(cfg *Config) error {
+	if cfg.Version == 0 {
+		cfg.Version = CurrentVersion
+	}
+	if cfg.Version != CurrentVersion {
+		return fmt.Errorf("unsupported config version %d", cfg.Version)
+	}
+	if cfg.Plugin == "" {
+		return fmt.Errorf("plugin is required")
+	}
+	cfg.Targets = cfg.PluginSettings.Targets
+	if len(cfg.Targets) == 0 {
+		return fmt.Errorf("plugin_settings.targets is required")
+	}
+	seen := map[string]bool{}
+	for i := range cfg.Targets {
+		target := &cfg.Targets[i]
+		if target.Name == "" {
+			return fmt.Errorf("plugin_settings.targets[%d].name is required", i)
+		}
+		if seen[target.Name] {
+			return fmt.Errorf("duplicate target %q", target.Name)
+		}
+		seen[target.Name] = true
+		if target.Vault.Path == "" {
+			return fmt.Errorf("plugin_settings.targets[%d].vault.path is required", i)
+		}
+		if cfg.Plugin == "livesync-couchdb" {
+			if target.LiveSyncCouchDB.URL == "" {
+				return fmt.Errorf("plugin_settings.targets[%d].livesync_couchdb.url is required", i)
+			}
+			if target.LiveSyncCouchDB.DB == "" {
+				return fmt.Errorf("plugin_settings.targets[%d].livesync_couchdb.db is required", i)
+			}
+		}
+		cfg.PluginSettings.Targets[i] = *target
+	}
+	return nil
+}
+
+func expandEnv(cfg *Config) {
+	cfg.Plugin = os.ExpandEnv(cfg.Plugin)
+	for i := range cfg.PluginSettings.Targets {
+		target := &cfg.PluginSettings.Targets[i]
+		target.Name = os.ExpandEnv(target.Name)
+		target.Vault.Path = os.ExpandEnv(target.Vault.Path)
+		target.State.Path = os.ExpandEnv(target.State.Path)
+		target.LiveSyncCouchDB.URL = os.ExpandEnv(target.LiveSyncCouchDB.URL)
+		target.LiveSyncCouchDB.DB = os.ExpandEnv(target.LiveSyncCouchDB.DB)
+		target.LiveSyncCouchDB.Username = os.ExpandEnv(target.LiveSyncCouchDB.Username)
+		target.LiveSyncCouchDB.Password = os.ExpandEnv(target.LiveSyncCouchDB.Password)
+		target.LiveSyncCouchDB.Passphrase = os.ExpandEnv(target.LiveSyncCouchDB.Passphrase)
+		target.LiveSyncCouchDB.BaseDir = os.ExpandEnv(target.LiveSyncCouchDB.BaseDir)
+	}
+}
+
+func mustGetwd() string {
+	wd, err := os.Getwd()
+	if err != nil {
+		return "."
+	}
+	return wd
+}
