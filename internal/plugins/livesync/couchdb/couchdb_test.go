@@ -232,6 +232,53 @@ func TestBulkWriteTreatsChunkConflictWithMissingReadAsExistingChunk(t *testing.T
 	}
 }
 
+func TestBulkWriteRetriesDocumentConflictWithLatestRevision(t *testing.T) {
+	var bulkCalls int
+	var retryRequest bulkDocsRequest
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/vault/note.md":
+			_ = json.NewEncoder(w).Encode(map[string]any{"_id": "note.md", "_rev": "2-current"})
+		case "/vault/_bulk_docs":
+			bulkCalls++
+			var request bulkDocsRequest
+			if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+				t.Fatalf("Decode request: %v", err)
+			}
+			if bulkCalls == 1 {
+				_ = json.NewEncoder(w).Encode([]bulkDocsResponse{
+					{ID: "note.md", Error: "conflict", Reason: "Document update conflict."},
+				})
+				return
+			}
+			retryRequest = request
+			_ = json.NewEncoder(w).Encode([]bulkDocsResponse{
+				{ID: "note.md", Rev: "3-written", OK: true},
+			})
+		default:
+			t.Fatalf("unexpected path: %s", r.URL.Path)
+		}
+	}))
+	defer server.Close()
+
+	client := New(Config{URL: server.URL, Database: "vault"})
+	responses, err := client.BulkWrite(t.Context(), []protocol.Record{
+		{Document: &protocol.Document{ID: "note.md", Path: "note.md", Type: "plain", Children: []string{}, Eden: map[string]protocol.EdenChunk{}}},
+	})
+	if err != nil {
+		t.Fatalf("BulkWrite returned error: %v", err)
+	}
+	if bulkCalls != 2 {
+		t.Fatalf("expected retry bulk call, got %d", bulkCalls)
+	}
+	if len(retryRequest.Docs) != 1 || retryRequest.Docs[0]["_rev"] != "2-current" {
+		t.Fatalf("retry should use latest rev, got %#v", retryRequest.Docs)
+	}
+	if responses["note.md"] != "3-written" {
+		t.Fatalf("unexpected responses: %#v", responses)
+	}
+}
+
 func TestSyncParametersReadsPBKDF2SaltFromLocalDoc(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/vault/_local/obsidian_livesync_sync_parameters" {

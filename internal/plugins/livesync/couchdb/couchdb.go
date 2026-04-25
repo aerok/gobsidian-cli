@@ -207,6 +207,7 @@ func (c *Client) BulkWrite(ctx context.Context, records []protocol.Record) (map[
 	reqBody := bulkDocsRequest{Docs: make([]map[string]any, 0, len(records))}
 	revs := map[string]string{}
 	chunkIDs := map[string]bool{}
+	docTemplates := map[string]map[string]any{}
 	for _, record := range records {
 		switch {
 		case record.Chunk != nil:
@@ -246,12 +247,83 @@ func (c *Client) BulkWrite(ctx context.Context, records []protocol.Record) (map[
 					doc["_rev"], _ = existing["_rev"].(string)
 				}
 			}
+			docTemplates[record.Document.ID] = copyDoc(doc)
 			reqBody.Docs = append(reqBody.Docs, doc)
 		}
 	}
 	if len(reqBody.Docs) == 0 {
 		return revs, nil
 	}
+	results, err := c.postBulkDocs(ctx, reqBody)
+	if err != nil {
+		return nil, err
+	}
+	conflictedDocs := map[string]bool{}
+	for _, result := range results {
+		if !result.OK {
+			if result.Error == "conflict" && strings.HasPrefix(result.ID, "h:") {
+				existing, ok, err := c.GetDoc(ctx, result.ID)
+				if err != nil {
+					return nil, err
+				}
+				typ, _ := existing["type"].(string)
+				if ok && typ == "leaf" {
+					revs[result.ID], _ = existing["_rev"].(string)
+				}
+				continue
+			}
+			if result.Error == "conflict" {
+				if _, ok := docTemplates[result.ID]; ok {
+					conflictedDocs[result.ID] = true
+					continue
+				}
+			}
+			return nil, fmt.Errorf("bulk write failed for %s: %s %s", result.ID, result.Error, result.Reason)
+		}
+		revs[result.ID] = result.Rev
+	}
+	if len(conflictedDocs) > 0 {
+		retryRevs, err := c.retryConflictedDocs(ctx, docTemplates, conflictedDocs)
+		if err != nil {
+			return nil, err
+		}
+		for id, rev := range retryRevs {
+			revs[id] = rev
+		}
+	}
+	return revs, nil
+}
+
+func (c *Client) retryConflictedDocs(ctx context.Context, templates map[string]map[string]any, conflicted map[string]bool) (map[string]string, error) {
+	reqBody := bulkDocsRequest{Docs: make([]map[string]any, 0, len(conflicted))}
+	for id := range conflicted {
+		doc := copyDoc(templates[id])
+		existing, ok, err := c.GetDoc(ctx, id)
+		if err != nil {
+			return nil, err
+		}
+		if !ok {
+			delete(doc, "_rev")
+		} else {
+			doc["_rev"], _ = existing["_rev"].(string)
+		}
+		reqBody.Docs = append(reqBody.Docs, doc)
+	}
+	results, err := c.postBulkDocs(ctx, reqBody)
+	if err != nil {
+		return nil, err
+	}
+	revs := map[string]string{}
+	for _, result := range results {
+		if !result.OK {
+			return nil, fmt.Errorf("bulk write failed for %s after revision refresh: %s %s", result.ID, result.Error, result.Reason)
+		}
+		revs[result.ID] = result.Rev
+	}
+	return revs, nil
+}
+
+func (c *Client) postBulkDocs(ctx context.Context, reqBody bulkDocsRequest) ([]bulkDocsResponse, error) {
 	resp, err := c.httpClient.R().
 		SetContext(ctx).
 		SetHeader("Content-Type", "application/json").
@@ -267,24 +339,15 @@ func (c *Client) BulkWrite(ctx context.Context, records []protocol.Record) (map[
 	if err := json.Unmarshal(resp.Body(), &results); err != nil {
 		return nil, err
 	}
-	for _, result := range results {
-		if !result.OK {
-			if result.Error == "conflict" && strings.HasPrefix(result.ID, "h:") {
-				existing, ok, err := c.GetDoc(ctx, result.ID)
-				if err != nil {
-					return nil, err
-				}
-				typ, _ := existing["type"].(string)
-				if ok && typ == "leaf" {
-					revs[result.ID], _ = existing["_rev"].(string)
-				}
-				continue
-			}
-			return nil, fmt.Errorf("bulk write failed for %s: %s %s", result.ID, result.Error, result.Reason)
-		}
-		revs[result.ID] = result.Rev
+	return results, nil
+}
+
+func copyDoc(in map[string]any) map[string]any {
+	out := make(map[string]any, len(in))
+	for key, value := range in {
+		out[key] = value
 	}
-	return revs, nil
+	return out
 }
 
 func (c *Client) endpoint(path string) string {
